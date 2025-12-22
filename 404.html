@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>404 – Redirecting…</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="refresh" content="2">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0f172a;
+            color: #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+
+        .box {
+            max-width: 420px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        p {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="box">
+        <h1>404</h1>
+        <p>That page doesn’t exist.<br>Redirecting you…</p>
+    </div>
+
+    <script>
+        (function () {
+            const path = window.location.pathname.replace(/^\/+/, '');
+            const query = path ? `?r=${encodeURIComponent(path)}` : '';
+            const base = `${window.location.origin}/`;
+            window.location.replace(base + query);
+        })();
+    </script>
+</body>
+
+</html>

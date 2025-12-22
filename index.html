@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Divya's Recipes</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms@0.5.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: 'Playfair Display', serif;
+        }
+
+        .recipe-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .recipe-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin: 2px;
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #0d9488;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .difficulty-easy {
+            color: #059669;
+        }
+
+        .difficulty-medium {
+            color: #d97706;
+        }
+
+        .difficulty-hard {
+            color: #dc2626;
+        }
+
+        .image-drop-zone {
+            border: 2px dashed #cbd5e1;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .image-drop-zone:hover {
+            border-color: #0d9488;
+            background-color: #f0fdfa;
+        }
+
+        .image-drop-zone.drag-over {
+            border-color: #0d9488;
+            background-color: #ccfbf1;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-slate-50 to-stone-100 min-h-screen">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-gray-900">Divya's Recipes</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <input type="text" id="search-input" placeholder="Search recipes..."
+                            class="w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            onkeyup="handleSearch()">
+                        <svg class="absolute left-3 top-2.5 h-5 w-5 text-gray-400" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                    <select id="category-filter" onchange="handleCategoryFilter()"
+                        class="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500">
+                        <option value="">All Categories</option>
+                        <option value="Breakfast">Breakfast</option>
+                        <option value="Lunch">Lunch</option>
+                        <option value="Dinner">Dinner</option>
+                        <option value="Dessert">Dessert</option>
+                        <option value="Appetizer">Appetizer</option>
+                        <option value="Beverage">Beverage</option>
+                        <option value="Snack">Snack</option>
+                    </select>
+                    <button onclick="toggleAdminMode()" id="admin-toggle"
+                        class="bg-teal-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-teal-700 transition">
+                        Add Recipe
+                    </button>
+                    <button onclick="openPDFImportModal()"
+                        class="bg-purple-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-purple-700 transition flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                            </path>
+                        </svg>
+                        Import PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- Stats Bar -->
+        <div id="stats-bar" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <!-- Stats will be populated here -->
+        </div>
+
+        <!-- Recipe Grid -->
+        <div id="recipe-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="col-span-full flex justify-center py-20">
+                <div class="loading-spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Recipe Modal -->
+    <div id="recipe-modal" class="modal">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 rounded-t-2xl">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-gray-900" id="modal-title">Add New Recipe</h2>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <form id="recipe-form" onsubmit="saveRecipe(event)" class="p-8 space-y-6">
+                <input type="hidden" id="recipe-id">
+
+                <!-- Basic Info -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Recipe Title *</label>
+                        <input type="text" id="title" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="e.g., Chocolate Chip Cookies">
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                        <textarea id="description" rows="3"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="A brief description or story about this recipe..."></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
+                        <select id="category" required
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="">Select Category</option>
+                            <option value="Breakfast">Breakfast</option>
+                            <option value="Lunch">Lunch</option>
+                            <option value="Dinner">Dinner</option>
+                            <option value="Dessert">Dessert</option>
+                            <option value="Appetizer">Appetizer</option>
+                            <option value="Beverage">Beverage</option>
+                            <option value="Snack">Snack</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Cuisine</label>
+                        <input type="text" id="cuisine"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="e.g., Italian, Mexican">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Prep Time (mins)</label>
+                        <input type="number" id="prep-time"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="15">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Cook Time (mins)</label>
+                        <input type="number" id="cook-time"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="30">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Servings</label>
+                        <input type="number" id="servings"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="4">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Difficulty</label>
+                        <select id="difficulty"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="Easy">Easy</option>
+                            <option value="Medium" selected>Medium</option>
+                            <option value="Hard">Hard</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Recipe Image -->
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Recipe Image</label>
+                    <input type="hidden" id="image-url">
+
+                    <div id="image-drop-zone" class="image-drop-zone p-8 text-center cursor-pointer">
+                        <input type="file" id="image-file-input" accept="image/*" class="hidden"
+                            onchange="handleImageFileSelect(event)">
+                        <div id="image-upload-prompt">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                            <p class="mt-2 text-sm text-gray-600">
+                                <span class="font-semibold text-teal-600 hover:text-teal-700">Click to upload</span> or
+                                drag and drop
+                            </p>
+                            <p class="text-xs text-gray-500">PNG, JPG, GIF up to 5MB</p>
+                        </div>
+                        <div id="image-preview-container" class="hidden">
+                            <img id="image-preview" class="mx-auto max-h-48 rounded-lg" alt="Preview">
+                            <p id="image-file-name" class="mt-2 text-sm text-gray-600"></p>
+                            <button type="button" onclick="clearImage()"
+                                class="mt-2 text-sm text-red-600 hover:text-red-700 font-medium">
+                                Remove Image
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ingredients -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Ingredients *</label>
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="ingredient-input"
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="Add an ingredient (e.g., 2 cups flour)"
+                            onkeypress="if(event.key === 'Enter') { event.preventDefault(); addItem('ingredient'); }">
+                        <button type="button" onclick="addItem('ingredient')"
+                            class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition">
+                            Add Ingredient
+                        </button>
+                    </div>
+                    <ul id="ingredients-list" class="space-y-2 mb-2 max-h-48 overflow-y-auto">
+                        <!-- Items will be added here -->
+                    </ul>
+                </div>
+
+                <!-- Directions -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Directions *</label>
+                    <div class="flex gap-2 mb-2">
+                        <textarea id="direction-input" rows="2"
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="Add a step (e.g., Preheat oven to 350°F)"
+                            onkeypress="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); addItem('direction'); }"></textarea>
+                        <button type="button" onclick="addItem('direction')"
+                            class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition h-fit">
+                            Add Step
+                        </button>
+                    </div>
+                    <ol id="directions-list" class="space-y-2 mb-2 max-h-60 overflow-y-auto list-decimal list-inside">
+                        <!-- Items will be added here -->
+                    </ol>
+                </div>
+
+                <!-- Tags -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Tags</label>
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="tag-input"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="Add a tag (e.g., vegetarian)"
+                            onkeypress="if(event.key === 'Enter') { event.preventDefault(); addItem('tag'); }">
+                        <button type="button" onclick="addItem('tag')"
+                            class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition">
+                            Add Tag
+                        </button>
+                    </div>
+                    <div id="tags-list" class="flex flex-wrap gap-2 mb-2">
+                        <!-- Tags will be added here -->
+                    </div>
+                </div>
+
+                <!-- Notes & Source -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
+                        <textarea id="notes" rows="3"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="Additional tips or variations..."></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Source</label>
+                        <input type="text" id="source"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="e.g., Grandma's cookbook">
+                    </div>
+                </div>
+
+                <!-- Submit Buttons -->
+                <div class="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+                    <button type="button" onclick="closeModal()"
+                        class="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 font-semibold hover:bg-gray-50 transition">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                        class="px-6 py-3 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition">
+                        Save Recipe
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- View Recipe Modal -->
+    <div id="view-modal" class="modal">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-gradient-to-r from-teal-600 to-teal-700 px-8 py-6 rounded-t-2xl">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 id="view-title" class="text-3xl font-bold text-white mb-2"></h2>
+                        <div id="view-meta" class="flex flex-wrap gap-3 text-teal-50"></div>
+                    </div>
+                    <button onclick="closeViewModal()" class="text-white hover:text-teal-100">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div id="view-content" class="p-8">
+                <!-- Content will be populated here -->
+            </div>
+
+            <div
+                class="sticky bottom-0 bg-white border-t border-gray-200 px-8 py-4 rounded-b-2xl flex justify-between items-center">
+                <button onclick="exportRecipeToPDF()"
+                    class="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10">
+                        </path>
+                    </svg>
+                    Export to PDF
+                </button>
+                <div class="flex space-x-3">
+                    <button id="view-edit-btn"
+                        class="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition">
+                        Edit Recipe
+                    </button>
+                    <button id="view-delete-btn"
+                        class="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                        Delete Recipe
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PDF Import Modal -->
+    <div id="pdf-import-modal" class="modal">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full">
+            <div class="bg-purple-600 px-8 py-6 rounded-t-2xl">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-bold text-white">Import Recipe from PDF</h2>
+                    <button onclick="closePDFImportModal()" class="text-white hover:text-purple-100">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-8">
+                <div class="mb-6">
+                    <p class="text-gray-600 mb-4">Upload a PDF file containing a recipe. Our AI will extract the recipe
+                        information automatically.</p>
+
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-purple-500 transition cursor-pointer"
+                        onclick="document.getElementById('pdf-file-input').click()">
+                        <input type="file" id="pdf-file-input" accept=".pdf" class="hidden"
+                            onchange="handlePDFFileSelect(event)">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                            </path>
+                        </svg>
+                        <p class="mt-2 text-sm text-gray-600">
+                            <span class="font-semibold text-purple-600">Click to upload</span> or drag and drop
+                        </p>
+                        <p class="text-xs text-gray-500">PDF up to 10MB</p>
+                    </div>
+
+                    <p id="pdf-file-name" class="mt-3 text-sm text-gray-600 hidden"></p>
+                </div>
+
+                <div id="pdf-conversion-status" class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
+                    <div class="flex items-center">
+                        <div class="loading-spinner mr-3"></div>
+                        <p class="text-blue-800">Converting PDF to recipe... This may take a moment.</p>
+                    </div>
+                </div>
+
+                <div id="pdf-conversion-error" class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg hidden">
+                    <div class="flex items-start">
+                        <svg class="w-5 h-5 text-red-600 mt-0.5 mr-2" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div>
+                            <p class="text-red-800 font-semibold">Conversion Failed</p>
+                            <p id="pdf-error-message" class="text-red-700 text-sm mt-1"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3">
+                    <button onclick="closePDFImportModal()"
+                        class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                        Cancel
+                    </button>
+                    <button id="convert-pdf-btn" onclick="convertPDFToRecipe()" disabled
+                        class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                        Convert to Recipe
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+
+        // Replace with your Cloudflare Worker URL
+        const WORKER_URL = 'https://recipeapi.veerbajaj11.workers.dev';
+
+        let allRecipes = [];
+        let filteredRecipes = [];
+        let currentRecipeForView = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadRecipes();
+            checkURLParameters();
+        });
+
+        // Check URL parameters on page load
+        function checkURLParameters() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const recipeId = urlParams.get('r');
+
+            if (recipeId) {
+                // Wait a moment for recipes to load, then open the specific recipe
+                setTimeout(() => {
+                    viewRecipe(recipeId);
+                }, 500);
+            }
+        }
+
+        // Load recipes from API
+        async function loadRecipes() {
+            try {
+                const response = await fetch(`${WORKER_URL}/recipes`);
+                if (!response.ok) throw new Error('Failed to load recipes');
+
+                allRecipes = await response.json();
+                filteredRecipes = [...allRecipes];
+                renderRecipes();
+                updateStats();
+            } catch (err) {
+                console.error('Error loading recipes:', err);
+                document.getElementById('recipe-grid').innerHTML = `
+                    <div class="col-span-full text-center py-20">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="mt-2 text-gray-600">Failed to load recipes. Please try again later.</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Render recipes
+        function renderRecipes() {
+            const grid = document.getElementById('recipe-grid');
+
+            if (filteredRecipes.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full text-center py-20">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <p class="mt-2 text-gray-600">No recipes found</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = filteredRecipes.map(recipe => `
+                <div class="recipe-card bg-white rounded-xl shadow-md overflow-hidden cursor-pointer" onclick="viewRecipe('${recipe.id}')">
+                    ${recipe.imageUrl ? `
+                        <img src="${escapeHtml(recipe.imageUrl)}" alt="${escapeHtml(recipe.title)}" class="w-full h-48 object-cover">
+                    ` : `
+                        <div class="w-full h-48 bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center">
+                            <svg class="w-16 h-16 text-white opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                            </svg>
+                        </div>
+                    `}
+                    
+                    <div class="p-6">
+                        <div class="flex items-start justify-between mb-2">
+                            <h3 class="text-xl font-bold text-gray-900 flex-1">${escapeHtml(recipe.title)}</h3>
+                            <span class="tag ${recipe.difficulty ? `difficulty-${recipe.difficulty.toLowerCase()}` : ''} bg-gray-100">
+                                ${escapeHtml(recipe.difficulty || 'Medium')}
+                            </span>
+                        </div>
+                        
+                        ${recipe.description ? `
+                            <p class="text-gray-600 text-sm mb-4 line-clamp-2">${escapeHtml(recipe.description)}</p>
+                        ` : ''}
+                        
+                        <div class="flex items-center text-sm text-gray-500 space-x-4 mb-3">
+                            ${recipe.prepTime ? `
+                                <span class="flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    ${recipe.prepTime}m prep
+                                </span>
+                            ` : ''}
+                            ${recipe.cookTime ? `
+                                <span class="flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"></path>
+                                    </svg>
+                                    ${recipe.cookTime}m cook
+                                </span>
+                            ` : ''}
+                            ${recipe.servings ? `
+                                <span class="flex items-center">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                    </svg>
+                                    ${recipe.servings} servings
+                                </span>
+                            ` : ''}
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <span class="tag bg-teal-100 text-teal-800">${escapeHtml(recipe.category || 'Uncategorized')}</span>
+                            ${recipe.cuisine ? `<span class="text-xs text-gray-500">${escapeHtml(recipe.cuisine)}</span>` : ''}
+                        </div>
+                        
+                        ${recipe.tags && recipe.tags.length > 0 ? `
+                            <div class="mt-3 flex flex-wrap gap-1">
+                                ${recipe.tags.slice(0, 3).map(tag => `
+                                    <span class="tag bg-gray-100 text-gray-700 text-xs">${escapeHtml(tag)}</span>
+                                `).join('')}
+                                ${recipe.tags.length > 3 ? `<span class="tag bg-gray-100 text-gray-700 text-xs">+${recipe.tags.length - 3}</span>` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update stats
+        function updateStats() {
+            const categories = {};
+            allRecipes.forEach(recipe => {
+                const cat = recipe.category || 'Uncategorized';
+                categories[cat] = (categories[cat] || 0) + 1;
+            });
+
+            const totalRecipes = allRecipes.length;
+            const avgPrepTime = Math.round(
+                allRecipes.filter(r => r.prepTime).reduce((sum, r) => sum + r.prepTime, 0) /
+                allRecipes.filter(r => r.prepTime).length || 0
+            );
+
+            document.getElementById('stats-bar').innerHTML = `
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">Total Recipes</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">${totalRecipes}</p>
+                        </div>
+                        <div class="p-3 bg-teal-100 rounded-lg">
+                            <svg class="w-8 h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">Categories</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">${Object.keys(categories).length}</p>
+                        </div>
+                        <div class="p-3 bg-purple-100 rounded-lg">
+                            <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">Avg. Prep Time</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">${avgPrepTime}m</p>
+                        </div>
+                        <div class="p-3 bg-amber-100 rounded-lg">
+                            <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-gray-500 text-sm font-medium">Most Popular</p>
+                            <p class="text-lg font-bold text-gray-900 mt-1">${Object.entries(categories).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'}</p>
+                        </div>
+                        <div class="p-3 bg-rose-100 rounded-lg">
+                            <svg class="w-8 h-8 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Search functionality
+        function handleSearch() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const category = document.getElementById('category-filter').value;
+
+            filteredRecipes = allRecipes.filter(recipe => {
+                const matchesSearch = !query ||
+                    recipe.title.toLowerCase().includes(query) ||
+                    (recipe.description && recipe.description.toLowerCase().includes(query)) ||
+                    (recipe.ingredients && recipe.ingredients.some(i => i.toLowerCase().includes(query))) ||
+                    (recipe.tags && recipe.tags.some(t => t.toLowerCase().includes(query)));
+
+                const matchesCategory = !category || recipe.category === category;
+
+                return matchesSearch && matchesCategory;
+            });
+
+            renderRecipes();
+        }
+
+        function handleCategoryFilter() {
+            handleSearch();
+        }
+
+        // View recipe
+        function viewRecipe(id) {
+            // Update URL without reloading page
+            const newUrl = `${window.location.pathname}?r=${id}`;
+            window.history.pushState({ recipeId: id }, '', newUrl);
+
+            const recipe = allRecipes.find(r => r.id === id);
+            if (!recipe) return;
+
+            currentRecipeForView = recipe;
+
+            document.getElementById('view-title').textContent = recipe.title;
+            document.getElementById('view-meta').innerHTML = `
+                <span class="tag bg-white bg-opacity-20">${recipe.category || 'Uncategorized'}</span>
+                ${recipe.cuisine ? `<span class="tag bg-white bg-opacity-20">${recipe.cuisine}</span>` : ''}
+                <span class="tag bg-white bg-opacity-20 ${recipe.difficulty ? `difficulty-${recipe.difficulty.toLowerCase()}` : ''}">${recipe.difficulty || 'Medium'}</span>
+            `;
+
+            document.getElementById('view-content').innerHTML = `
+                ${recipe.imageUrl ? `
+                    <img src="${escapeHtml(recipe.imageUrl)}" alt="${escapeHtml(recipe.title)}" class="w-full max-h-96 object-cover rounded-lg mb-6">
+                ` : ''}
+
+                ${recipe.description ? `
+                    <div class="mb-6">
+                        <p class="text-gray-700 text-lg leading-relaxed">${escapeHtml(recipe.description)}</p>
+                    </div>
+                ` : ''}
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    ${recipe.prepTime ? `
+                        <div class="bg-teal-50 p-4 rounded-lg text-center">
+                            <p class="text-teal-600 font-semibold text-2xl">${recipe.prepTime}m</p>
+                            <p class="text-gray-600 text-sm">Prep Time</p>
+                        </div>
+                    ` : ''}
+                    ${recipe.cookTime ? `
+                        <div class="bg-orange-50 p-4 rounded-lg text-center">
+                            <p class="text-orange-600 font-semibold text-2xl">${recipe.cookTime}m</p>
+                            <p class="text-gray-600 text-sm">Cook Time</p>
+                        </div>
+                    ` : ''}
+                    ${recipe.servings ? `
+                        <div class="bg-purple-50 p-4 rounded-lg text-center">
+                            <p class="text-purple-600 font-semibold text-2xl">${recipe.servings}</p>
+                            <p class="text-gray-600 text-sm">Servings</p>
+                        </div>
+                    ` : ''}
+                    ${recipe.prepTime && recipe.cookTime ? `
+                        <div class="bg-blue-50 p-4 rounded-lg text-center">
+                            <p class="text-blue-600 font-semibold text-2xl">${recipe.prepTime + recipe.cookTime}m</p>
+                            <p class="text-gray-600 text-sm">Total Time</p>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                <div class="grid md:grid-cols-2 gap-8 mb-8">
+                    <div>
+                        <h3 class="text-2xl font-bold text-gray-900 mb-4 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                            Ingredients
+                        </h3>
+                        <ul class="space-y-2">
+                            ${(recipe.ingredients || []).map(ing => `
+                                <li class="flex items-start">
+                                    <svg class="w-5 h-5 text-teal-500 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                    </svg>
+                                    <span class="text-gray-700">${escapeHtml(ing)}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-2xl font-bold text-gray-900 mb-4 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                            </svg>
+                            Directions
+                        </h3>
+                        <ol class="space-y-4">
+                            ${(recipe.directions || []).map((dir, i) => `
+                                <li class="flex items-start">
+                                    <span class="flex-shrink-0 w-8 h-8 bg-teal-600 text-white rounded-full flex items-center justify-center font-bold mr-3">${i + 1}</span>
+                                    <span class="text-gray-700 pt-1">${escapeHtml(dir)}</span>
+                                </li>
+                            `).join('')}
+                        </ol>
+                    </div>
+                </div>
+                
+                ${recipe.notes || recipe.tags?.length > 0 || recipe.source ? `
+                    <div class="border-t border-gray-200 pt-6">
+                        ${recipe.tags && recipe.tags.length > 0 ? `
+                            <div class="mb-4">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Tags</h4>
+                                <div class="flex flex-wrap gap-2">
+                                    ${recipe.tags.map(tag => `
+                                        <span class="tag bg-gray-100 text-gray-700">${escapeHtml(tag)}</span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${recipe.notes ? `
+                            <div class="mb-4">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Notes</h4>
+                                <p class="text-gray-600">${escapeHtml(recipe.notes)}</p>
+                            </div>
+                        ` : ''}
+                        
+                        ${recipe.source ? `
+                            <div>
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Source</h4>
+                                <p class="text-gray-600">${escapeHtml(recipe.source)}</p>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
+            `;
+
+            document.getElementById('view-edit-btn').onclick = () => editRecipe(id);
+            document.getElementById('view-delete-btn').onclick = () => deleteRecipe(id);
+
+            document.getElementById('view-modal').classList.add('active');
+        }
+
+        // Export recipe to PDF
+        function exportRecipeToPDF() {
+            if (!currentRecipeForView) return;
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const recipe = currentRecipeForView;
+
+            let y = 20;
+
+            // Title
+            doc.setFontSize(20);
+            doc.setFont(undefined, 'bold');
+            doc.text(recipe.title, 20, y);
+            y += 10;
+
+            // Metadata
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            const metadata = [];
+            if (recipe.category) metadata.push(recipe.category);
+            if (recipe.cuisine) metadata.push(recipe.cuisine);
+            if (recipe.difficulty) metadata.push(recipe.difficulty);
+            doc.text(metadata.join(' | '), 20, y);
+            y += 10;
+
+            // Times and servings
+            if (recipe.prepTime || recipe.cookTime || recipe.servings) {
+                const times = [];
+                if (recipe.prepTime) times.push(`Prep: ${recipe.prepTime}m`);
+                if (recipe.cookTime) times.push(`Cook: ${recipe.cookTime}m`);
+                if (recipe.servings) times.push(`Servings: ${recipe.servings}`);
+                doc.text(times.join(' | '), 20, y);
+                y += 15;
+            }
+
+            // Description
+            if (recipe.description) {
+                doc.setFontSize(10);
+                const lines = doc.splitTextToSize(recipe.description, 170);
+                doc.text(lines, 20, y);
+                y += (lines.length * 5) + 10;
+            }
+
+            // Ingredients
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text('Ingredients', 20, y);
+            y += 8;
+
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            (recipe.ingredients || []).forEach(ing => {
+                if (y > 270) {
+                    doc.addPage();
+                    y = 20;
+                }
+                doc.text(`• ${ing}`, 25, y);
+                y += 6;
+            });
+
+            y += 5;
+
+            // Directions
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text('Directions', 20, y);
+            y += 8;
+
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            (recipe.directions || []).forEach((dir, i) => {
+                if (y > 270) {
+                    doc.addPage();
+                    y = 20;
+                }
+                const lines = doc.splitTextToSize(`${i + 1}. ${dir}`, 165);
+                doc.text(lines, 25, y);
+                y += (lines.length * 6) + 3;
+            });
+
+            // Notes and source
+            if (recipe.notes || recipe.source) {
+                y += 5;
+                if (y > 270) {
+                    doc.addPage();
+                    y = 20;
+                }
+
+                if (recipe.notes) {
+                    doc.setFont(undefined, 'bold');
+                    doc.text('Notes:', 20, y);
+                    y += 6;
+                    doc.setFont(undefined, 'normal');
+                    const notesLines = doc.splitTextToSize(recipe.notes, 170);
+                    doc.text(notesLines, 20, y);
+                    y += (notesLines.length * 5) + 5;
+                }
+
+                if (recipe.source) {
+                    doc.setFont(undefined, 'bold');
+                    doc.text('Source:', 20, y);
+                    y += 6;
+                    doc.setFont(undefined, 'normal');
+                    doc.text(recipe.source, 20, y);
+                }
+            }
+
+            doc.save(`${recipe.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+        }
+
+        // Toggle admin mode (open modal)
+        function toggleAdminMode() {
+            openModal();
+        }
+
+        // Open modal for new recipe
+        function openModal() {
+            document.getElementById('recipe-form').reset();
+            document.getElementById('recipe-id').value = '';
+            document.getElementById('modal-title').textContent = 'Add New Recipe';
+            document.getElementById('image-url').value = '';
+
+            // Clear lists
+            document.getElementById('ingredients-list').innerHTML = '';
+            document.getElementById('directions-list').innerHTML = '';
+            document.getElementById('tags-list').innerHTML = '';
+
+            clearImage();
+            document.getElementById('recipe-modal').classList.add('active');
+        }
+
+        // Edit recipe
+        function editRecipe(id) {
+            const recipe = allRecipes.find(r => r.id === id);
+            if (!recipe) return;
+
+            closeViewModal();
+
+            document.getElementById('modal-title').textContent = 'Edit Recipe';
+            document.getElementById('recipe-id').value = recipe.id;
+            document.getElementById('title').value = recipe.title || '';
+            document.getElementById('description').value = recipe.description || '';
+            document.getElementById('category').value = recipe.category || '';
+            document.getElementById('cuisine').value = recipe.cuisine || '';
+            document.getElementById('prep-time').value = recipe.prepTime || '';
+            document.getElementById('cook-time').value = recipe.cookTime || '';
+            document.getElementById('servings').value = recipe.servings || '';
+            document.getElementById('difficulty').value = recipe.difficulty || 'Medium';
+            document.getElementById('servings').value = recipe.servings || '';
+            document.getElementById('difficulty').value = recipe.difficulty || 'Medium';
+
+            // Populate lists
+            document.getElementById('ingredients-list').innerHTML = '';
+            (recipe.ingredients || []).forEach(i => addItem('ingredient', i));
+
+            document.getElementById('directions-list').innerHTML = '';
+            (recipe.directions || []).forEach(d => addItem('direction', d));
+
+            document.getElementById('tags-list').innerHTML = '';
+            (recipe.tags || []).forEach(t => addItem('tag', t));
+
+            document.getElementById('notes').value = recipe.notes || '';
+            document.getElementById('source').value = recipe.source || '';
+
+            // Handle existing image
+            if (recipe.imageUrl) {
+                document.getElementById('image-url').value = recipe.imageUrl;
+                document.getElementById('image-preview').src = recipe.imageUrl;
+                document.getElementById('image-file-name').textContent = 'Current image';
+                document.getElementById('image-upload-prompt').classList.add('hidden');
+                document.getElementById('image-preview-container').classList.remove('hidden');
+            } else {
+                clearImage();
+            }
+
+            document.getElementById('recipe-modal').classList.add('active');
+        }
+
+        // Image upload functionality
+        let selectedImageFile = null;
+
+        function handleImageFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                alert('Please select an image file');
+                return;
+            }
+
+            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                alert('Image size must be less than 5MB');
+                return;
+            }
+
+            selectedImageFile = file;
+
+            // Convert to base64 and show preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const base64Url = e.target.result;
+                document.getElementById('image-url').value = base64Url;
+                document.getElementById('image-preview').src = base64Url;
+                document.getElementById('image-file-name').textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+                document.getElementById('image-upload-prompt').classList.add('hidden');
+                document.getElementById('image-preview-container').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearImage() {
+            selectedImageFile = null;
+            document.getElementById('image-file-input').value = '';
+            document.getElementById('image-url').value = '';
+            document.getElementById('image-preview').src = '';
+            document.getElementById('image-file-name').textContent = '';
+            document.getElementById('image-upload-prompt').classList.remove('hidden');
+            document.getElementById('image-preview-container').classList.add('hidden');
+        }
+
+        // Setup drag and drop for image upload
+        const imageDropZone = document.getElementById('image-drop-zone');
+        if (imageDropZone) {
+            imageDropZone.addEventListener('click', () => {
+                document.getElementById('image-file-input').click();
+            });
+
+            imageDropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                imageDropZone.classList.add('drag-over');
+            });
+
+            imageDropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                imageDropZone.classList.remove('drag-over');
+            });
+
+            imageDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                imageDropZone.classList.remove('drag-over');
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type.startsWith('image/')) {
+                    const input = document.getElementById('image-file-input');
+                    input.files = files;
+                    handleImageFileSelect({ target: input });
+                }
+            });
+        }
+
+        // Save recipe
+        async function saveRecipe(event) {
+            event.preventDefault();
+
+            const id = document.getElementById('recipe-id').value;
+            const recipe = {
+                title: document.getElementById('title').value.trim(),
+                description: document.getElementById('description').value.trim(),
+                category: document.getElementById('category').value,
+                cuisine: document.getElementById('cuisine').value.trim(),
+                prepTime: parseInt(document.getElementById('prep-time').value) || null,
+                cookTime: parseInt(document.getElementById('cook-time').value) || null,
+                servings: parseInt(document.getElementById('servings').value) || null,
+                difficulty: document.getElementById('difficulty').value,
+                difficulty: document.getElementById('difficulty').value,
+                ingredients: Array.from(document.querySelectorAll('#ingredients-list li span')).map(el => el.textContent),
+                directions: Array.from(document.querySelectorAll('#directions-list li span')).map(el => el.textContent),
+                tags: Array.from(document.querySelectorAll('#tags-list .tag')).map(el => el.firstChild.textContent.trim()).filter(t => t),
+                notes: document.getElementById('notes').value.trim(),
+                source: document.getElementById('source').value.trim(),
+                imageUrl: document.getElementById('image-url').value.trim()
+            };
+
+            try {
+                const url = id ? `${WORKER_URL}/recipes/${id}` : `${WORKER_URL}/recipes`;
+                const method = id ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(recipe)
+                });
+
+                if (!response.ok) throw new Error('Failed to save recipe');
+
+                closeModal();
+                await loadRecipes();
+
+                // Show success notification
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50';
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Recipe ${id ? 'updated' : 'created'} successfully!</span>
+                    </div>
+                `;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
+
+            } catch (err) {
+                console.error('Error saving recipe:', err);
+                alert('Failed to save recipe. Please try again.');
+            }
+        }
+
+        // Delete recipe
+        async function deleteRecipe(id) {
+            if (!confirm('Are you sure you want to delete this recipe?')) return;
+
+            try {
+                const response = await fetch(`${WORKER_URL}/recipes/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) throw new Error('Failed to delete recipe');
+
+                closeViewModal();
+                await loadRecipes();
+
+                // Show success notification
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-4 rounded-lg shadow-lg z-50';
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <span>Recipe deleted successfully!</span>
+                    </div>
+                `;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
+
+            } catch (err) {
+                console.error('Error deleting recipe:', err);
+                alert('Failed to delete recipe. Please try again.');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('recipe-modal').classList.remove('active');
+        }
+
+        function closeViewModal() {
+            // Clear URL parameter
+            window.history.pushState({}, '', window.location.pathname);
+            document.getElementById('view-modal').classList.remove('active');
+        }
+
+        // Close modals on outside click
+        document.getElementById('recipe-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'recipe-modal') closeModal();
+        });
+
+        document.getElementById('view-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'view-modal') closeViewModal();
+        });
+
+        // Escape key to close modals
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                closeViewModal();
+            }
+        });
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // PDF Import Functions
+        let selectedPDFFile = null;
+
+        function openPDFImportModal() {
+            selectedPDFFile = null;
+            document.getElementById('pdf-file-input').value = '';
+            document.getElementById('pdf-file-name').classList.add('hidden');
+            document.getElementById('pdf-conversion-status').classList.add('hidden');
+            document.getElementById('pdf-conversion-error').classList.add('hidden');
+            document.getElementById('convert-pdf-btn').disabled = true;
+            document.getElementById('pdf-import-modal').classList.add('active');
+        }
+
+        function closePDFImportModal() {
+            document.getElementById('pdf-import-modal').classList.remove('active');
+            selectedPDFFile = null;
+        }
+
+        function handlePDFFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (file.type !== 'application/pdf') {
+                alert('Please select a PDF file');
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                alert('File size must be less than 10MB');
+                return;
+            }
+
+            selectedPDFFile = file;
+            document.getElementById('pdf-file-name').textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            document.getElementById('pdf-file-name').classList.remove('hidden');
+            document.getElementById('convert-pdf-btn').disabled = false;
+            document.getElementById('pdf-conversion-error').classList.add('hidden');
+        }
+
+        async function convertPDFToRecipe() {
+            if (!selectedPDFFile) return;
+
+            const convertBtn = document.getElementById('convert-pdf-btn');
+            convertBtn.disabled = true;
+            document.getElementById('pdf-conversion-status').classList.remove('hidden');
+            document.getElementById('pdf-conversion-error').classList.add('hidden');
+
+            try {
+                const formData = new FormData();
+                formData.append('pdf', selectedPDFFile);
+
+                const response = await fetch(`${WORKER_URL}/convert-pdf`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.details || error.error || 'Failed to convert PDF');
+                }
+
+                const recipe = await response.json();
+
+                // Close PDF modal
+                closePDFImportModal();
+
+                // Open recipe form with pre-filled data
+                openModal();
+                document.getElementById('title').value = recipe.title || '';
+                document.getElementById('description').value = recipe.description || '';
+                document.getElementById('category').value = recipe.category || '';
+                document.getElementById('cuisine').value = recipe.cuisine || '';
+                document.getElementById('prep-time').value = recipe.prepTime || '';
+                document.getElementById('cook-time').value = recipe.cookTime || '';
+                document.getElementById('servings').value = recipe.servings || '';
+                document.getElementById('difficulty').value = recipe.difficulty || 'Medium';
+                document.getElementById('servings').value = recipe.servings || '';
+                document.getElementById('difficulty').value = recipe.difficulty || 'Medium';
+
+                // Populate lists
+                document.getElementById('ingredients-list').innerHTML = '';
+                (recipe.ingredients || []).forEach(i => addItem('ingredient', i));
+
+                document.getElementById('directions-list').innerHTML = '';
+                (recipe.directions || []).forEach(d => addItem('direction', d));
+
+                document.getElementById('tags-list').innerHTML = '';
+                (recipe.tags || []).forEach(t => addItem('tag', t));
+
+                document.getElementById('notes').value = recipe.notes || '';
+                document.getElementById('source').value = recipe.source || 'Imported from PDF';
+
+                // Show success message
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50';
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div>
+                            <p class="font-semibold">PDF Converted Successfully!</p>
+                            <p class="text-sm">Review the recipe and click Save</p>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 5000);
+
+            } catch (err) {
+                console.error('PDF conversion error:', err);
+                document.getElementById('pdf-conversion-error').classList.remove('hidden');
+                document.getElementById('pdf-error-message').textContent = err.message;
+                convertBtn.disabled = false;
+            } finally {
+                document.getElementById('pdf-conversion-status').classList.add('hidden');
+            }
+        }
+
+        // Drag and drop support for PDF upload
+        const pdfDropZone = document.getElementById('pdf-import-modal');
+        if (pdfDropZone) {
+            pdfDropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            pdfDropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].type === 'application/pdf') {
+                    const input = document.getElementById('pdf-file-input');
+                    input.files = files;
+                    handlePDFFileSelect({ target: input });
+                }
+            });
+        }
+
+        // Close PDF import modal
+        document.getElementById('pdf-import-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'pdf-import-modal') closePDFImportModal();
+        });
+
+        // Add Item Function for interactive lists
+        function addItem(type, value = null) {
+            const inputId = `${type === 'ingredient' ? 'ingredient' : type === 'direction' ? 'direction' : 'tag'}-input`;
+            const listId = `${type}s-list`;
+            const input = document.getElementById(inputId);
+            const list = document.getElementById(listId);
+
+            const text = value || input.value.trim();
+            if (!text) return;
+
+            if (type === 'tag') {
+                const item = document.createElement('span');
+                item.className = 'tag bg-teal-100 text-teal-800 flex items-center gap-1 pr-1 mb-1';
+                item.innerHTML = `
+                    ${escapeHtml(text)}
+                    <button type="button" onclick="this.parentElement.remove()" class="text-teal-600 hover:text-teal-800 p-0.5 rounded-full hover:bg-teal-200 focus:outline-none">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                `;
+                list.appendChild(item);
+            } else {
+                const item = document.createElement('li');
+                item.className = 'group relative pr-8 pl-1 py-1 hover:bg-gray-50 rounded';
+                item.innerHTML = `
+                    <span class="text-gray-700 break-words">${escapeHtml(text)}</span>
+                    <button type="button" onclick="this.closest('li').remove()" class="absolute top-1.5 right-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                `;
+                list.appendChild(item);
+            }
+
+            if (!value) {
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', (event) => {
+            if (event.state && event.state.recipeId) {
+                viewRecipe(event.state.recipeId);
+            } else {
+                closeViewModal();
+            }
+        });
+
+    </script>
+</body>
+
+</html>
