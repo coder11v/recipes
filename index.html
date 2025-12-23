@@ -884,10 +884,7 @@
 
             // Check if recipe has a pdfUrl
             if (recipe.pdfUrl && recipe.pdfUrl.trim()) {
-                // Open the Google Drive link in a new tab
                 window.open(recipe.pdfUrl, '_blank');
-
-                // Show notification
                 const notification = document.createElement('div');
                 notification.className = 'fixed top-4 right-4 bg-blue-500 text-white px-6 py-4 rounded-lg shadow-lg z-50';
                 notification.innerHTML = `
@@ -903,17 +900,8 @@
                 return;
             }
 
-            // If no pdfUrl, fall back to generating PDF with jsPDF
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
-
-            // ... rest of your existing PDF generation code ...
-            if (!currentRecipeForView) return;
-
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const recipe = currentRecipeForView;
-
             let y = 20;
 
             // Title
@@ -1016,7 +1004,6 @@
 
             doc.save(`${recipe.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
         }
-
         // Toggle admin mode (open modal)
         function toggleAdminMode() {
             openModal();
