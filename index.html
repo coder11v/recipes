@@ -356,6 +356,12 @@
                             class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                             placeholder="e.g., Grandma's cookbook">
                     </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">PDF URL (Google Drive)</label>
+                        <input type="url" id="pdf-url"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="https://drive.google.com/file/d/...">
+                    </div>
                 </div>
 
                 <!-- Submit Buttons -->
@@ -874,111 +880,142 @@
         function exportRecipeToPDF() {
             if (!currentRecipeForView) return;
 
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
             const recipe = currentRecipeForView;
 
-            let y = 20;
+            // Check if recipe has a pdfUrl
+            if (recipe.pdfUrl && recipe.pdfUrl.trim()) {
+                // Open the Google Drive link in a new tab
+                window.open(recipe.pdfUrl, '_blank');
 
-            // Title
-            doc.setFontSize(20);
-            doc.setFont(undefined, 'bold');
-            doc.text(recipe.title, 20, y);
-            y += 10;
-
-            // Metadata
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            const metadata = [];
-            if (recipe.category) metadata.push(recipe.category);
-            if (recipe.cuisine) metadata.push(recipe.cuisine);
-            if (recipe.difficulty) metadata.push(recipe.difficulty);
-            doc.text(metadata.join(' | '), 20, y);
-            y += 10;
-
-            // Times and servings
-            if (recipe.prepTime || recipe.cookTime || recipe.servings) {
-                const times = [];
-                if (recipe.prepTime) times.push(`Prep: ${recipe.prepTime}m`);
-                if (recipe.cookTime) times.push(`Cook: ${recipe.cookTime}m`);
-                if (recipe.servings) times.push(`Servings: ${recipe.servings}`);
-                doc.text(times.join(' | '), 20, y);
-                y += 15;
+                // Show notification
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-blue-500 text-white px-6 py-4 rounded-lg shadow-lg z-50';
+                notification.innerHTML = `
+            <div class="flex items-center">
+                <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                </svg>
+                <span>Opening PDF from Google Drive...</span>
+            </div>
+        `;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
+                return;
             }
 
-            // Description
-            if (recipe.description) {
-                doc.setFontSize(10);
-                const lines = doc.splitTextToSize(recipe.description, 170);
-                doc.text(lines, 20, y);
-                y += (lines.length * 5) + 10;
-            }
+            // If no pdfUrl, fall back to generating PDF with jsPDF
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
 
-            // Ingredients
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            doc.text('Ingredients', 20, y);
-            y += 8;
+            // ... rest of your existing PDF generation code ...
+        }
+        if (!currentRecipeForView) return;
 
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const recipe = currentRecipeForView;
+
+        let y = 20;
+
+        // Title
+        doc.setFontSize(20);
+        doc.setFont(undefined, 'bold');
+        doc.text(recipe.title, 20, y);
+        y += 10;
+
+        // Metadata
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        const metadata = [];
+        if (recipe.category) metadata.push(recipe.category);
+        if (recipe.cuisine) metadata.push(recipe.cuisine);
+        if (recipe.difficulty) metadata.push(recipe.difficulty);
+        doc.text(metadata.join(' | '), 20, y);
+        y += 10;
+
+        // Times and servings
+        if (recipe.prepTime || recipe.cookTime || recipe.servings) {
+            const times = [];
+            if (recipe.prepTime) times.push(`Prep: ${recipe.prepTime}m`);
+            if (recipe.cookTime) times.push(`Cook: ${recipe.cookTime}m`);
+            if (recipe.servings) times.push(`Servings: ${recipe.servings}`);
+            doc.text(times.join(' | '), 20, y);
+            y += 15;
+        }
+
+        // Description
+        if (recipe.description) {
             doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            (recipe.ingredients || []).forEach(ing => {
-                if (y > 270) {
-                    doc.addPage();
-                    y = 20;
-                }
-                doc.text(`• ${ing}`, 25, y);
-                y += 6;
-            });
+            const lines = doc.splitTextToSize(recipe.description, 170);
+            doc.text(lines, 20, y);
+            y += (lines.length * 5) + 10;
+        }
 
+        // Ingredients
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Ingredients', 20, y);
+        y += 8;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        (recipe.ingredients || []).forEach(ing => {
+            if (y > 270) {
+                doc.addPage();
+                y = 20;
+            }
+            doc.text(`• ${ing}`, 25, y);
+            y += 6;
+        });
+
+        y += 5;
+
+        // Directions
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Directions', 20, y);
+        y += 8;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        (recipe.directions || []).forEach((dir, i) => {
+            if (y > 270) {
+                doc.addPage();
+                y = 20;
+            }
+            const lines = doc.splitTextToSize(`${i + 1}. ${dir}`, 165);
+            doc.text(lines, 25, y);
+            y += (lines.length * 6) + 3;
+        });
+
+        // Notes and source
+        if (recipe.notes || recipe.source) {
             y += 5;
-
-            // Directions
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            doc.text('Directions', 20, y);
-            y += 8;
-
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            (recipe.directions || []).forEach((dir, i) => {
-                if (y > 270) {
-                    doc.addPage();
-                    y = 20;
-                }
-                const lines = doc.splitTextToSize(`${i + 1}. ${dir}`, 165);
-                doc.text(lines, 25, y);
-                y += (lines.length * 6) + 3;
-            });
-
-            // Notes and source
-            if (recipe.notes || recipe.source) {
-                y += 5;
-                if (y > 270) {
-                    doc.addPage();
-                    y = 20;
-                }
-
-                if (recipe.notes) {
-                    doc.setFont(undefined, 'bold');
-                    doc.text('Notes:', 20, y);
-                    y += 6;
-                    doc.setFont(undefined, 'normal');
-                    const notesLines = doc.splitTextToSize(recipe.notes, 170);
-                    doc.text(notesLines, 20, y);
-                    y += (notesLines.length * 5) + 5;
-                }
-
-                if (recipe.source) {
-                    doc.setFont(undefined, 'bold');
-                    doc.text('Source:', 20, y);
-                    y += 6;
-                    doc.setFont(undefined, 'normal');
-                    doc.text(recipe.source, 20, y);
-                }
+            if (y > 270) {
+                doc.addPage();
+                y = 20;
             }
 
-            doc.save(`${recipe.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+            if (recipe.notes) {
+                doc.setFont(undefined, 'bold');
+                doc.text('Notes:', 20, y);
+                y += 6;
+                doc.setFont(undefined, 'normal');
+                const notesLines = doc.splitTextToSize(recipe.notes, 170);
+                doc.text(notesLines, 20, y);
+                y += (notesLines.length * 5) + 5;
+            }
+
+            if (recipe.source) {
+                doc.setFont(undefined, 'bold');
+                doc.text('Source:', 20, y);
+                y += 6;
+                doc.setFont(undefined, 'normal');
+                doc.text(recipe.source, 20, y);
+            }
+        }
+
+        doc.save(`${recipe.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
         }
 
         // Toggle admin mode (open modal)
@@ -1021,6 +1058,7 @@
             document.getElementById('difficulty').value = recipe.difficulty || 'Medium';
             document.getElementById('servings').value = recipe.servings || '';
             document.getElementById('difficulty').value = recipe.difficulty || 'Medium';
+            document.getElementById('pdf-url').value = recipe.pdfUrl || '';
 
             // Populate lists
             document.getElementById('ingredients-list').innerHTML = '';
@@ -1144,6 +1182,7 @@
                 tags: Array.from(document.querySelectorAll('#tags-list .tag')).map(el => el.firstChild.textContent.trim()).filter(t => t),
                 notes: document.getElementById('notes').value.trim(),
                 source: document.getElementById('source').value.trim(),
+                pdfUrl: document.getElementById('pdf-url').value.trim(),
                 imageUrl: document.getElementById('image-url').value.trim()
             };
 
