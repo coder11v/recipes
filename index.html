@@ -7,6 +7,11 @@
     <title>Divya's Recipes</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms@0.5.0"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Firebase logic is now handled dynamically in initAuth() to keep config in worker secrets -->
+    <script>
+        // Placeholder for early access functions if needed
+    </script>
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -146,6 +151,20 @@
                         </svg>
                         Import PDF
                     </button>
+                    <!-- User Auth Info -->
+                    <div id="user-auth-section" class="flex items-center space-x-3 ml-4 border-l border-gray-200 pl-4">
+                        <button id="login-btn" onclick="openLoginModal()"
+                            class="text-gray-600 font-semibold hover:text-teal-600 transition">
+                            Login
+                        </button>
+                        <div id="user-profile" class="hidden flex items-center space-x-3">
+                            <img id="user-avatar" class="w-8 h-8 rounded-full border-2 border-teal-500" src="" alt="User">
+                            <button id="logout-btn" onclick="handleLogout()"
+                                class="text-sm text-gray-500 hover:text-red-500 transition">
+                                Logout
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -160,9 +179,9 @@
         </div>
 
         <!-- Recipe Grid -->
-        <div id="recipe-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div class="col-span-full flex justify-center py-20">
-                <div class="loading-spinner"></div>
+        <div id="recipe-view">
+            <div id="recipe-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Recipes will be populated here -->
             </div>
         </div>
     </div>
@@ -252,6 +271,30 @@
                             <option value="Medium" selected>Medium</option>
                             <option value="Hard">Hard</option>
                         </select>
+                    </div>
+
+                    <div class="flex items-center space-x-3 mt-4">
+                        <input type="checkbox" id="is-public" checked
+                            class="w-5 h-5 text-teal-600 border-gray-300 rounded focus:ring-teal-500">
+                        <label for="is-public" class="text-sm font-semibold text-gray-700">Make this recipe public</label>
+                    </div>
+                </div>
+
+                <!-- Sharing -->
+                <div id="sharing-section">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Share with (email addresses)</label>
+                    <div class="flex gap-2 mb-2">
+                        <input type="email" id="share-email-input"
+                            class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                            placeholder="user@example.com"
+                            onkeypress="if(event.key === 'Enter') { event.preventDefault(); addItem('share-email'); }">
+                        <button type="button" onclick="addItem('share-email')"
+                            class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition">
+                            Share
+                        </button>
+                    </div>
+                    <div id="share-emails-list" class="flex flex-wrap gap-2 mb-2">
+                        <!-- Shares will be added here -->
                     </div>
                 </div>
 
@@ -472,7 +515,9 @@
                             <span class="font-semibold text-purple-600">Click to upload</span> or drag and drop
                         </p>
                         <p class="text-xs text-gray-500">PDF up to 10MB</p>
-                    </div>
+                            </div>
+        </div>
+    </div>
 
                     <p id="pdf-file-name" class="mt-3 text-sm text-gray-600 hidden"></p>
                 </div>
@@ -521,12 +566,44 @@
         let allRecipes = [];
         let filteredRecipes = [];
         let currentRecipeForView = null;
+        let currentUser = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            const savedUser = localStorage.getItem('recipe_user');
+            if (!savedUser) {
+                window.location.href = './login/index.html';
+                return;
+            }
+
+            currentUser = JSON.parse(savedUser);
+            updateAuthUI();
             loadRecipes();
             checkURLParameters();
         });
+
+        function updateAuthUI() {
+            const loginBtn = document.getElementById('login-btn');
+            const userProfile = document.getElementById('user-profile');
+            const userAvatar = document.getElementById('user-avatar');
+            const adminToggle = document.getElementById('admin-toggle');
+
+            if (currentUser) {
+                loginBtn.classList.add('hidden');
+                userProfile.classList.remove('hidden');
+                userAvatar.src = currentUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.displayName || currentUser.email)}&background=0d9488&color=fff`;
+                adminToggle.classList.remove('hidden');
+            } else {
+                loginBtn.classList.remove('hidden');
+                userProfile.classList.add('hidden');
+                adminToggle.classList.add('hidden');
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('recipe_user');
+            window.location.href = './login/index.html';
+        }
 
         // Check URL parameters on page load
         function checkURLParameters() {
@@ -548,11 +625,20 @@
                 if (!response.ok) throw new Error('Failed to load recipes');
 
                 allRecipes = await response.json();
-                filteredRecipes = [...allRecipes];
+                
+                // Filter recipes: Public recipes + Private recipes from owner + Shared recipes
+                filteredRecipes = allRecipes.filter(recipe => {
+                    if (recipe.isPublic) return true;
+                    if (currentUser && recipe.uid === currentUser.uid) return true;
+                    if (currentUser && recipe.sharedWith && recipe.sharedWith.includes(currentUser.email)) return true;
+                    return false;
+                });
+
                 renderRecipes();
                 updateStats();
             } catch (err) {
                 console.error('Error loading recipes:', err);
+                // ... same error UI
                 document.getElementById('recipe-grid').innerHTML = `
                     <div class="col-span-full text-center py-20">
                         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -595,9 +681,23 @@
                     <div class="p-6">
                         <div class="flex items-start justify-between mb-2">
                             <h3 class="text-xl font-bold text-gray-900 flex-1">${escapeHtml(recipe.title)}</h3>
-                            <span class="tag ${recipe.difficulty ? `difficulty-${recipe.difficulty.toLowerCase()}` : ''} bg-gray-100">
-                                ${escapeHtml(recipe.difficulty || 'Medium')}
-                            </span>
+                            <div class="flex flex-col items-end">
+                                <span class="tag ${recipe.difficulty ? `difficulty-${recipe.difficulty.toLowerCase()}` : ''} bg-gray-100">
+                                    ${escapeHtml(recipe.difficulty || 'Medium')}
+                                </span>
+                                ${!recipe.isPublic && currentUser && recipe.uid === currentUser.uid ? `
+                                    <span class="flex items-center text-[10px] text-gray-400 mt-1">
+                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path></svg>
+                                        Private
+                                    </span>
+                                ` : ''}
+                                ${recipe.sharedWith && currentUser && recipe.sharedWith.includes(currentUser.email) && recipe.uid !== currentUser.uid ? `
+                                    <span class="flex items-center text-[10px] text-blue-500 mt-1">
+                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.25-2.906z"></path></svg>
+                                        Shared with me
+                                    </span>
+                                ` : ''}
+                            </div>
                         </div>
                         
                         ${recipe.description ? `
@@ -621,29 +721,12 @@
                                     ${recipe.cookTime}m cook
                                 </span>
                             ` : ''}
-                            ${recipe.servings ? `
-                                <span class="flex items-center">
-                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
-                                    </svg>
-                                    ${recipe.servings} servings
-                                </span>
-                            ` : ''}
                         </div>
                         
                         <div class="flex items-center justify-between">
                             <span class="tag bg-teal-100 text-teal-800">${escapeHtml(recipe.category || 'Uncategorized')}</span>
-                            ${recipe.cuisine ? `<span class="text-xs text-gray-500">${escapeHtml(recipe.cuisine)}</span>` : ''}
+                            <span class="text-[10px] text-gray-400">by ${escapeHtml(recipe.author || 'Anonymous')}</span>
                         </div>
-                        
-                        ${recipe.tags && recipe.tags.length > 0 ? `
-                            <div class="mt-3 flex flex-wrap gap-1">
-                                ${recipe.tags.slice(0, 3).map(tag => `
-                                    <span class="tag bg-gray-100 text-gray-700 text-xs">${escapeHtml(tag)}</span>
-                                `).join('')}
-                                ${recipe.tags.length > 3 ? `<span class="tag bg-gray-100 text-gray-700 text-xs">+${recipe.tags.length - 3}</span>` : ''}
-                            </div>
-                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -728,6 +811,12 @@
             const category = document.getElementById('category-filter').value;
 
             filteredRecipes = allRecipes.filter(recipe => {
+                // First apply visibility filter
+                const isVisible = recipe.isPublic || 
+                    (currentUser && recipe.uid === currentUser.uid) || 
+                    (currentUser && recipe.sharedWith && recipe.sharedWith.includes(currentUser.email));
+                if (!isVisible) return false;
+
                 const matchesSearch = !query ||
                     recipe.title.toLowerCase().includes(query) ||
                     (recipe.description && recipe.description.toLowerCase().includes(query)) ||
@@ -872,6 +961,15 @@
 
             document.getElementById('view-edit-btn').onclick = () => editRecipe(id);
             document.getElementById('view-delete-btn').onclick = () => deleteRecipe(id);
+
+            // Only show edit/delete if owner
+            if (currentUser && recipe.uid === currentUser.uid) {
+                document.getElementById('view-edit-btn').classList.remove('hidden');
+                document.getElementById('view-delete-btn').classList.remove('hidden');
+            } else {
+                document.getElementById('view-edit-btn').classList.add('hidden');
+                document.getElementById('view-delete-btn').classList.add('hidden');
+            }
 
             document.getElementById('view-modal').classList.add('active');
         }
@@ -1020,6 +1118,7 @@
             document.getElementById('ingredients-list').innerHTML = '';
             document.getElementById('directions-list').innerHTML = '';
             document.getElementById('tags-list').innerHTML = '';
+            document.getElementById('share-emails-list').innerHTML = '';
 
             clearImage();
             document.getElementById('recipe-modal').classList.add('active');
@@ -1045,6 +1144,7 @@
             document.getElementById('servings').value = recipe.servings || '';
             document.getElementById('difficulty').value = recipe.difficulty || 'Medium';
             document.getElementById('pdf-url').value = recipe.pdfUrl || '';
+            document.getElementById('is-public').checked = recipe.isPublic !== false; // Default to true if not specified
 
             // Populate lists
             document.getElementById('ingredients-list').innerHTML = '';
@@ -1055,6 +1155,9 @@
 
             document.getElementById('tags-list').innerHTML = '';
             (recipe.tags || []).forEach(t => addItem('tag', t));
+
+            document.getElementById('share-emails-list').innerHTML = '';
+            (recipe.sharedWith || []).forEach(e => addItem('share-email', e));
 
             document.getElementById('notes').value = recipe.notes || '';
             document.getElementById('source').value = recipe.source || '';
@@ -1166,10 +1269,14 @@
                 ingredients: Array.from(document.querySelectorAll('#ingredients-list li span')).map(el => el.textContent),
                 directions: Array.from(document.querySelectorAll('#directions-list li span')).map(el => el.textContent),
                 tags: Array.from(document.querySelectorAll('#tags-list .tag')).map(el => el.firstChild.textContent.trim()).filter(t => t),
+                sharedWith: Array.from(document.querySelectorAll('#share-emails-list .tag')).map(el => el.firstChild.textContent.trim()).filter(e => e),
                 notes: document.getElementById('notes').value.trim(),
                 source: document.getElementById('source').value.trim(),
                 pdfUrl: document.getElementById('pdf-url').value.trim(),
-                imageUrl: document.getElementById('image-url').value.trim()
+                imageUrl: document.getElementById('image-url').value.trim(),
+                isPublic: document.getElementById('is-public').checked,
+                uid: currentUser ? currentUser.uid : null,
+                author: currentUser ? (currentUser.displayName || currentUser.email) : 'Anonymous'
             };
 
             try {
@@ -1527,9 +1634,9 @@
             const text = value || input.value.trim();
             if (!text) return;
 
-            if (type === 'tag') {
+            if (type === 'tag' || type === 'share-email') {
                 const item = document.createElement('span');
-                item.className = 'tag bg-teal-100 text-teal-800 flex items-center gap-1 pr-1 mb-1';
+                item.className = `tag ${type === 'tag' ? 'bg-teal-100 text-teal-800' : 'bg-blue-100 text-blue-800'} flex items-center gap-1 pr-1 mb-1`;
                 item.innerHTML = `
                     ${escapeHtml(text)}
                     <button type="button" onclick="this.parentElement.remove()" class="text-teal-600 hover:text-teal-800 p-0.5 rounded-full hover:bg-teal-200 focus:outline-none">
